@@ -1,0 +1,44 @@
+# Local application, settings and packaging output
+/FoxBridge-WinUI/
+/FoxBridge.lnk
+/AGENTS.md
+foxbridge-ui-settings.json*
+/development/.publish-stage/
+/development/release-artifacts/
+
+# Local notes, protocol research and discarded design variants
+/development/docs/
+/development/research/
+/development/firefox-vpn/
+/development/design/icon-options/
+
+# Build and IDE output
+**/bin/
+**/obj/
+**/.vs/
+**/.idea/
+*.user
+*.suo
+*.pdb
+*.binlog
+*.log
+*.zip
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local credentials
+.env
+.env.*
+!.env.example
+*.key
+*.pfx
+*.p12
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store

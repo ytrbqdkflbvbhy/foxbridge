@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "FoxBridge.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "FoxBridge.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

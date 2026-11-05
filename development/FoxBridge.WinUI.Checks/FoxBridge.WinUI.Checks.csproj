@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../FoxBridge.WinUI/StatisticsFormatter.cs" Link="StatisticsFormatter.cs" />
+    <Compile Include="../FoxBridge.WinUI/UiPreferences.cs" Link="UiPreferences.cs" />
+    <Compile Include="../FoxBridge.WinUI/DependencyCheck.cs" Link="DependencyCheck.cs" />
+  </ItemGroup>
+</Project>

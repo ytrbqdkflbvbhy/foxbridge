@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <title>FoxBridge · Подвесной мост</title>
+  <defs>
+    <linearGradient id="tile" x1="32" y1="8" x2="232" y2="256" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#343A44"/><stop offset="1" stop-color="#1C212B"/>
+    </linearGradient>
+    <linearGradient id="bridge" x1="64" y1="66" x2="192" y2="194" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFD09B"/><stop offset="1" stop-color="#F68B5F"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#tile)"/>
+  <g stroke="url(#bridge)" stroke-linecap="round">
+  <path d="M85 124V157M105 145V157M151 145V157M171 124V157" stroke-width="6"/>
+  <path d="M64 70C68 111 99 151 128 151C157 151 188 111 192 70" stroke="url(#bridge)" stroke-width="11" stroke-linecap="round"/>
+  <path d="M64 66V192M192 66V192" stroke="url(#bridge)" stroke-width="14" stroke-linecap="round"/>
+  <path d="M64 158H192" stroke-width="11"/>
+  </g>
+</svg>

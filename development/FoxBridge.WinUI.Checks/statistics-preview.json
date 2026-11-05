@@ -1,0 +1,19 @@
+{
+  "ip": "203.0.113.42", "ip_version": 4, "score": 38, "raw_score": 38,
+  "score_scope": "cidr", "region_adjusted": false,
+  "checked_at": "2026-11-05T06:00:00Z", "connect_ms": 142, "request_ms": 615,
+  "trace": {"loc": "DE", "colo": "FRA"},
+  "server": {"host": "demo.fastly-masque.net", "country": "DE"},
+  "geoip": {"country": "Germany", "region": "Hesse", "city": "Frankfurt", "isp": "Example network"},
+  "iprisk": {
+    "ip": "203.0.113.1", "cidr": "203.0.113.0/24", "asn": 64500,
+    "asOrganization": "Example network", "asname": "EXAMPLE-NET", "asn_kind": "Hosting",
+    "company_name": "Example Company", "company_type": "hosting", "rpki_status": "Valid",
+    "is_datacenter": true, "isResidential": false, "is_vpn": true,
+    "is_proxy": false, "is_tor": false, "is_crawler": null, "is_abuser": false,
+    "countryCode": "DE", "country": "Germany", "region": "Hesse", "city": "Frankfurt",
+    "ai_verdict": {"label": "Hosting", "confidence": 82, "reasoning": "Демонстрационное пояснение для проверки переноса длинного текста в ячейке статистики."}
+  },
+  "timezone_candidate": "Europe/Berlin", "timezone_estimated": true,
+  "errors": {"geoip": "Демонстрационное предупреждение источника"}
+}

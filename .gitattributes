@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.ico binary
+*.rtf binary
+*.pem text eol=lf
+development/**/licenses/** -whitespace
