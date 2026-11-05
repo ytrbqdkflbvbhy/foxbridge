@@ -1,94 +1,81 @@
-This application was entirely vibe-coded with GPT.
+Это приложение целиком создано в формате вайбкодинга с помощью GPT.
 
 # FoxBridge
 
-<img src="development/FoxBridge.WinUI/Assets/AppIcon.png" width="80" alt="FoxBridge icon">
+<img src="development/FoxBridge.WinUI/Assets/AppIcon.png" width="80" alt="Иконка FoxBridge">
 
-FoxBridge is a Windows app that routes CLI traffic through Firefox VPN using a preconfigured terminal.
+FoxBridge создан для работы Claude Code, Codex и других инструментов командной строки через встроенный VPN Firefox. Приложение использует доступ из выбранного профиля Firefox, поднимает локальный прокси и открывает терминал с подготовленным окружением.
 
-[Download the latest release](https://github.com/ytrbqdkflbvbhy/foxbridge/releases/latest)
+Десктопный интерфейс объединяет выбор профиля и сервера, контроль квоты, проверку выходного IP и запуск терминала. Все действия доступны в одном окне, настройки подключения сохраняются между запусками.
 
-The interface and its built-in Readme are currently in Russian.
+## Возможности
 
-## Features
+* Выбор профиля Firefox и сервера VPN.
+* Локальный HTTP прокси с поддержкой HTTPS через CONNECT.
+* Проверка IP, географии и признаков риска через Net.Coffee.
+* PowerShell с настроенными переменными прокси и часовым поясом.
+* Отображение остатка квоты, активности соединения и журнала событий.
+* Сохранение выбранного профиля, сервера и порта.
+* Восстановление связи с выбранным сервером.
 
-* Local HTTP CONNECT proxy using access from your Firefox VPN profile.
-* Manual server selection and saved profile, server and port preferences.
-* IP information, trust score and risk indicators from Net.Coffee.
-* PowerShell configured with proxy variables and an IP-based TZ value.
-* Traffic quota display, session activity, connection recovery and an event log.
-* Dependency checks, dark and light themes, and built-in usage instructions.
+## Требования
 
-## Run
-
-1. Download `FoxBridge-v0.7.0-win-x64.zip` from Releases.
-2. Extract the whole archive into a writable folder.
-3. Run `FoxBridge.WinUI.exe`. Keep the other files, `Assets` and `Backend` beside it.
-4. Select your Firefox profile and load it.
-5. Choose a server, enable the proxy and wait for the IP check.
-6. Open the protected terminal and run your CLI tools there.
-
-Requirements:
-
-* Windows 11 x64, the tested platform.
+* Windows 11 x64.
 * [.NET Runtime 10 x64](https://dotnet.microsoft.com/download/dotnet/10.0).
 * [Windows App Runtime 2.6.4 x64](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads).
-* [Python 3.12 or newer](https://www.python.org/downloads/windows/) available in PATH.
-* A Firefox profile signed in to an account with available Firefox VPN access.
+* [Python 3.12 или новее](https://www.python.org/downloads/windows/), доступный через PATH.
+* Профиль Firefox с выполненным входом в аккаунт и доступом к встроенному VPN.
 
-The runtimes are installed separately. Python packages such as PySide6 are not
-required by the current WinUI application. Missing .NET or Windows App Runtime
-can produce an installation prompt before the window opens. Python and backend
-file checks are shown in Settings.
+## Начало работы
 
-## How it works
+1. Распакуйте архив приложения в папку с правом записи.
+2. Запустите `FoxBridge.WinUI.exe`. Все файлы архива, включая папки `Assets` и `Backend`, должны оставаться рядом с EXE.
+3. Выберите профиль Firefox и нажмите «Загрузить профиль».
+4. Выберите сервер и нажмите «Включить прокси».
+5. Дождитесь проверки IP и определения часового пояса. При необходимости изучите вкладку «Статистика».
+6. Нажмите «Открыть защищённый терминал» и запускайте нужные CLI в открывшемся PowerShell.
 
-The C# WinUI 3 interface starts a Python backend through private stdin/stdout pipes.
-The backend listens on `127.0.0.1` and forwards supported traffic to the selected
-Firefox VPN proxy using account access from the selected Firefox profile.
+Для смены сервера или профиля сначала отключите прокси. Подключение всегда включается вручную.
 
-Opening the protected terminal sets `HTTP_PROXY`, `HTTPS_PROXY`, `WS_PROXY`,
-`WSS_PROXY`, `NO_PROXY` and `TZ` for that terminal and its child processes.
-The timezone comes from Net.Coffee, with a country-based estimate when needed.
-The Windows system timezone and system proxy settings are unchanged.
+## Принцип работы
 
-## Limitations and privacy
+Сетевое ядро получает данные доступа к VPN из локального профиля Firefox и открывает прокси на `127.0.0.1`. Подключения передаются через выбранный сервер Firefox VPN.
 
-* Applications must support the supplied proxy and TZ environment variables.
-* The protected terminal does not provide a sandbox, system-wide VPN or network kill switch.
-* Existing applications keep their original environment. Programs that ignore proxy settings can connect directly.
-* Net.Coffee receives the IP being checked. Its score is not an Anthropic rating or an access guarantee.
-* Mozilla's traffic quota belongs to the account and can include other Firefox VPN usage.
-* Local programs that can reach the listening port can use the proxy and consume quota.
-* Keep Firefox profiles and authorization data private. Local preferences are stored in `foxbridge-ui-settings.json` beside the app and must not be shared.
+Новому терминалу передаются переменные `HTTP_PROXY`, `HTTPS_PROXY`, `WS_PROXY`, `WSS_PROXY`, `NO_PROXY` и `TZ`. Их наследуют дочерние процессы. Часовой пояс берётся из ответа Net.Coffee; при отсутствии точного значения используется приблизительное соответствие стране.
 
-FoxBridge is an unofficial client and is not affiliated with Mozilla or Anthropic.
-Use it according to the terms of the services you access.
+Системные настройки прокси и часовой пояс Windows сохраняются.
 
-## Build
+## Ограничения и личные данные
 
-Development requires the .NET 10 SDK, Windows SDK and Windows build tools suitable
-for WinUI 3. The project targets Windows SDK 10.0.26100.0 and pins Windows App SDK
-components to 2.6.4. Python 3.12+ is required to run the backend and its checks.
+* Программы должны поддерживать переданные переменные окружения. Приложения, игнорирующие настройки прокси, могут подключаться напрямую.
+* Защищённый терминал представляет собой подготовленное окружение PowerShell. Песочница и блокировка прямого доступа к сети отсутствуют.
+* Оценка Net.Coffee не гарантирует доступ к сервисам. При проверке Net.Coffee получает проверяемый публичный IP.
+* Квота Mozilla относится к аккаунту и может учитывать использование VPN в Firefox и на других устройствах.
+* Другие локальные программы с доступом к порту могут использовать включённый прокси и расходовать квоту.
+* Профили Firefox, токены и файл `foxbridge-ui-settings.json` содержат личные данные. Не передавайте их вместе со сборкой.
 
-From the repository root in PowerShell:
+FoxBridge является неофициальным клиентом. Mozilla и Anthropic не участвуют в разработке проекта. Соблюдайте условия сервисов, к которым подключаетесь.
+
+## Сборка
+
+Для разработки нужны .NET SDK 10, Windows SDK и средства сборки WinUI 3. Проект использует Windows SDK 10.0.26100.0 и компоненты Windows App SDK 2.6.4.
+
+Команды выполняются из корня репозитория в PowerShell:
 
 ```powershell
-# Debug builds stay inside development and do not replace the ready application.
+# Сборка для разработки. Готовое приложение не изменяется.
 dotnet build development/FoxBridge.WinUI/FoxBridge.WinUI.csproj -c Debug -p:Platform=x64
 
-# Publish the ready Release application to FoxBridge-WinUI.
+# Обновление готовой Release сборки в папке FoxBridge-WinUI.
 & ./development/Publish-Release.ps1
 
-# Package a distributable ZIP and its SHA256 checksum without personal settings.
+# Создание архива и контрольной суммы без личных настроек.
 & ./development/Package-Release.ps1 -Version 0.7.0
 ```
 
-Release archives are written to `development/release-artifacts` and are excluded
-from Git. The publication script preserves your local settings and updates the
-local `FoxBridge.lnk` shortcut.
+Архивы создаются в `development/release-artifacts` и не включаются в Git. Скрипт публикации сохраняет локальные настройки и обновляет ярлык `FoxBridge.lnk`.
 
-## Checks
+## Проверки
 
 ```powershell
 dotnet run --project development/FoxBridge.WinUI.Checks/FoxBridge.WinUI.Checks.csproj
@@ -98,24 +85,21 @@ python -m unittest test_bridge test_netcoffee test_reliability test_launcher -v
 Pop-Location
 ```
 
-These checks use synthetic data and local test servers. They do not sign in to a
-Firefox account or make a real VPN connection.
+Проверки используют тестовые данные и локальные серверы. Вход в аккаунт Firefox и подключение к реальному VPN не выполняются.
 
-## Repository layout
+## Структура проекта
 
-| Path | Purpose |
+| Папка | Содержимое |
 | --- | --- |
-| `development/FoxBridge.WinUI` | Current C# and XAML application and stdio adapter |
-| `development/FoxBridge-source` | Shared Python engine, tests and retained Qt prototype |
-| `development/FoxBridge.WinUI.Checks` | Formatting, preferences and dependency checks |
-| `development/distribution` | Release instructions and third-party license texts |
-| `development/design` | Reproducible icon asset generation |
-| `FoxBridge-WinUI` | Local ready Release output, excluded from Git |
+| `development/FoxBridge.WinUI` | Интерфейс на C# и XAML, запуск сетевого ядра |
+| `development/FoxBridge-source` | Сетевое ядро на Python, тесты и исходный прототип на Qt |
+| `development/FoxBridge.WinUI.Checks` | Проверки форматирования, настроек и зависимостей |
+| `development/distribution` | Инструкция к сборке и лицензии сторонних компонентов |
+| `development/design` | Генерация ресурсов иконки |
+| `FoxBridge-WinUI` | Локальная готовая сборка, исключённая из Git |
 
-GitHub Actions builds and checks changes. Pushing a version tag such as `v0.7.0`
-builds a Windows x64 ZIP, adds a checksum and publishes a GitHub Release.
+GitHub Actions собирает проект и выполняет проверки. Тег версии, например `v0.7.0`, запускает создание архива Windows x64, контрольной суммы и публикацию релиза.
 
-## License
+## Лицензия
 
-Original code and artwork are licensed under [MIT](LICENSE).
-See [third-party notices](THIRD-PARTY-NOTICES.md) for dependency terms.
+Исходный код и оригинальные изображения распространяются под [MIT](LICENSE). Условия сторонних компонентов перечислены в [уведомлениях](THIRD-PARTY-NOTICES.md).
