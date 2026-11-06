@@ -1,4 +1,4 @@
-param([string]$Version = '0.8.0')
+param([string]$Version = '0.8.1')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Use a semantic version such as 0.8.0' }
 $foxRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))

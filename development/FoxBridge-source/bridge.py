@@ -367,6 +367,7 @@ class LocalProxy:
         self.tasks = set()
         self.maintenance = None
         self.up = self.down = self.active = 0
+        self.activity_changed = asyncio.Event()
         self.since = None
         self.session_id = uuid.uuid4().hex
         self.health = 'starting'
@@ -482,6 +483,7 @@ class LocalProxy:
 
     async def stop(self):
         self.health = 'stopped'
+        self.activity_changed.set()
         listener, self.listener = self.listener, None
         if listener:
             listener.close()
@@ -533,6 +535,8 @@ class LocalProxy:
                 self.up += len(chunk)
             else:
                 self.down += len(chunk)
+            if not self.activity_changed.is_set():
+                self.activity_changed.set()
         if writer.can_write_eof():
             writer.write_eof()
 
@@ -586,6 +590,7 @@ class LocalProxy:
                 await remote.drain()
             established = True
             self.active += 1
+            self.activity_changed.set()
             pipes = [asyncio.create_task(self.pipe(reader, remote, True)),
                      asyncio.create_task(self.pipe(upstream_reader, writer, False))]
             # TLS upstream cannot half-close: retain download after local upload EOF.
@@ -617,6 +622,7 @@ class LocalProxy:
                 await asyncio.gather(*pipes, return_exceptions=True)
             if established:
                 self.active -= 1
+                self.activity_changed.set()
             await close_writer(remote)
             await close_writer(writer)
             self.tasks.discard(task)

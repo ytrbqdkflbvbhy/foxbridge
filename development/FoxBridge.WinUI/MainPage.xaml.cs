@@ -16,7 +16,13 @@ public sealed partial class MainPage : Page
 {
     private readonly BridgeClient client = new();
     private readonly bool administrator = new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
-    private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(2) };
+    private readonly DispatcherTimer displayTimer = new();
+    private bool windowVisible = true, windowActive = true, updatingObservation;
+    private (string? Session, int Interval) observation;
+    private JsonElement? activitySnapshot;
+    private long activityTimestamp;
+    private JsonElement? healthSnapshot;
+    private long healthTimestamp;
     private bool initialized, backendReady, busy, connected, ready, checking, fresh, closing;
     private string? session, launchTimezone;
     private string health = "stopped";
@@ -52,10 +58,12 @@ public sealed partial class MainPage : Page
             Render();
         });
         Loaded += Start;
-        timer.Tick += async (_, _) =>
+        displayTimer.Tick += (_, _) =>
         {
-            Render();
-            if (backendReady && connected && !busy && !checking) await Send("activity");
+            UpdateActivityDisplay();
+            UpdateHealthDisplay();
+            UpdateRefreshButton();
+            UpdateDisplayScheduling();
         };
     }
 
@@ -133,7 +141,6 @@ public sealed partial class MainPage : Page
             {
                 client.Start(pythonPath!);
                 backendStarted = true;
-                timer.Start();
                 Log("Компоненты проверены. Сетевое ядро запущено.");
                 Notice.IsOpen = false;
             }
@@ -224,6 +231,9 @@ public sealed partial class MainPage : Page
                 Log(connectionProgress);
                 break;
             case "connect":
+                activitySnapshot = null;
+                healthSnapshot = null;
+                ActivityText.Text = "Ожидаем данные подключения…";
                 connectionProgress = "";
                 busy = false;
                 connected = true;
@@ -237,6 +247,7 @@ public sealed partial class MainPage : Page
                 session = Text(data, "session_id");
                 activePort = (int)Number(data, "port");
                 health = Text(data.GetProperty("health"), "state", "online");
+                UpdateHealth(data.GetProperty("health"));
                 refreshAt = Flag(data, "prechecked") ? DateTimeOffset.UtcNow.AddSeconds(10) : DateTimeOffset.MinValue;
                 SetScore(null);
                 Notice.IsOpen = false;
@@ -245,6 +256,10 @@ public sealed partial class MainPage : Page
                 if (!Flag(data, "prechecked")) await Check();
                 break;
             case "disconnect":
+                activitySnapshot = null;
+                healthSnapshot = null;
+                ActivityText.Text = "Прокси выключен";
+                ChannelText.Text = "Канал не запущен";
                 busy = false;
                 connected = checking = fresh = false;
                 SetScore(null);
@@ -264,10 +279,11 @@ public sealed partial class MainPage : Page
                 }
                 break;
             case "activity":
-                if (!connected || data.ValueKind != JsonValueKind.Object) break;
-                UpdateHealth(data.GetProperty("health"));
-                ActivityText.Text = $"Соединений: {Number(data, "active"):0}   ·   ↑ {Bytes(Number(data, "up"))}   ↓ {Bytes(Number(data, "down"))}   ·   {TimeSpan.FromSeconds(Number(data, "uptime")):hh\\:mm\\:ss}";
-                break;
+                if (!connected || data.ValueKind != JsonValueKind.Object || Text(data, "session_id") != session) return;
+                activitySnapshot = data;
+                activityTimestamp = Stopwatch.GetTimestamp();
+                UpdateActivityDisplay();
+                return;
             case "check":
                 if (!connected || Text(data, "session_id") != session) break;
                 checking = false;
@@ -443,10 +459,25 @@ public sealed partial class MainPage : Page
         if (Text(data, "session_id") != session) return;
         health = Text(data, "state", "stopped");
         if (health != "online") fresh = false;
-        var retry = Number(data, "retry_in");
-        RetryButton.IsEnabled = !(Text(data, "code") is "quota" or "rate_limit") || retry <= 0;
-        ChannelText.Text = health == "online" ? "Канал Firefox доступен." : $"{Text(data, "message")} Повтор через {retry:0} с.";
-        if (health == "recovering") ScoreNote.Text = "Канал восстанавливается. Оценка неактуальна.";
+        healthSnapshot = data;
+        healthTimestamp = Stopwatch.GetTimestamp();
+        UpdateHealthDisplay();
+    }
+
+    private void UpdateHealthDisplay()
+    {
+        if (!windowVisible || healthSnapshot is not { } data || Text(data, "session_id") != session) return;
+        var retry = Math.Max(0, Number(data, "retry_in") - Stopwatch.GetElapsedTime(healthTimestamp).TotalSeconds);
+        if (DashboardVisible)
+        {
+            RetryButton.IsEnabled = !(Text(data, "code") is "quota" or "rate_limit") || retry <= 0;
+            if (health == "recovering") ScoreNote.Text = "Канал восстанавливается. Оценка неактуальна.";
+        }
+        if (DetailsVisible)
+        {
+            var text = health == "online" ? "Канал Firefox доступен." : $"{Text(data, "message")} Повтор через {Math.Ceiling(retry):0} с.";
+            if (ChannelText.Text != text) ChannelText.Text = text;
+        }
     }
 
     private void Render()
@@ -468,9 +499,7 @@ public sealed partial class MainPage : Page
         PortBox.IsEnabled = !busy && !connected;
         SaveSettingsButton.IsEnabled = backendReady && !busy && !connected;
         ProfilesPathBox.IsEnabled = !busy && !connected;
-        var wait = Math.Max(0, (int)Math.Ceiling((refreshAt - DateTimeOffset.UtcNow).TotalSeconds));
-        RefreshStatsButton.IsEnabled = backendReady && connected && !busy && !checking && wait == 0;
-        RefreshStatsButton.Content = checking ? "Проверяем…" : wait > 0 && connected ? $"Обновить через {wait} с" : "Обновить оценку";
+        UpdateRefreshButton();
         ShellButton.IsEnabled = CanLaunch() && !pendingLaunch;
         BrowserButton.IsEnabled = CanLaunchBrowser() && !browserOpening;
         BrowserButtonText.Text = browserOpening ? "Запускаем Firefox…" : "Открыть Firefox";
@@ -482,6 +511,75 @@ public sealed partial class MainPage : Page
             : checking ? "Обновляем сведения. Ниже показана предыдущая проверка."
             : !connected || !fresh ? "Сохранённые данные. Для актуальной статистики обновите оценку."
             : "Данные текущего подключения · Net.Coffee";
+        UpdateDisplayScheduling();
+    }
+
+    public void SetWindowActivity(bool visible, bool active)
+    {
+        windowVisible = visible;
+        windowActive = active;
+        if (!initialized || closing) return;
+        UpdateDisplayScheduling();
+        if (visible)
+        {
+            UpdateActivityDisplay();
+            UpdateHealthDisplay();
+            UpdateRefreshButton();
+        }
+    }
+
+    private bool DashboardVisible => windowVisible && Dashboard.Visibility == Visibility.Visible;
+    private bool DetailsVisible => windowVisible && DetailsPanel.Visibility == Visibility.Visible;
+
+    private void UpdateRefreshButton()
+    {
+        if (!DashboardVisible) return;
+        var wait = Math.Max(0, (int)Math.Ceiling((refreshAt - DateTimeOffset.UtcNow).TotalSeconds));
+        RefreshStatsButton.IsEnabled = backendReady && connected && !busy && !checking && wait == 0;
+        var text = checking ? "Проверяем…" : wait > 0 && connected ? $"Обновить через {wait} с" : "Обновить оценку";
+        if (!Equals(RefreshStatsButton.Content, text)) RefreshStatsButton.Content = text;
+    }
+
+    private void UpdateActivityDisplay()
+    {
+        if (!DetailsVisible || !connected || activitySnapshot is not { } data) return;
+        var uptime = Number(data, "uptime") + Stopwatch.GetElapsedTime(activityTimestamp).TotalSeconds;
+        var text = $"Соединений: {Number(data, "active"):0}   ·   ↑ {Bytes(Number(data, "up"))}   ↓ {Bytes(Number(data, "down"))}   ·   {TimeSpan.FromSeconds(uptime):hh\\:mm\\:ss}";
+        if (ActivityText.Text != text) ActivityText.Text = text;
+    }
+
+    private (string? Session, int Interval) DesiredObservation =>
+        !closing && backendReady && connected && DetailsVisible
+            ? (session, windowActive ? 2 : 10) : (null, 0);
+
+    private void UpdateDisplayScheduling()
+    {
+        if (!closing && connected && (DetailsVisible ||
+            DashboardVisible && (health == "recovering" || refreshAt > DateTimeOffset.UtcNow)))
+        {
+            // The only periodic UI work is visible elapsed time / cooldown text.
+            var interval = TimeSpan.FromSeconds(windowActive ? 1 : 10);
+            if (displayTimer.Interval != interval) displayTimer.Interval = interval;
+            if (!displayTimer.IsEnabled) displayTimer.Start();
+        }
+        else displayTimer.Stop();
+        if (!updatingObservation && observation != DesiredObservation)
+            _ = UpdateObservationAsync();
+    }
+
+    private async Task UpdateObservationAsync()
+    {
+        updatingObservation = true;
+        try
+        {
+            while (!closing && backendReady && observation != DesiredObservation)
+            {
+                var desired = DesiredObservation;
+                await Send("observe_activity", new { session_id = desired.Session, interval = desired.Interval });
+                observation = desired;
+            }
+        }
+        finally { updatingObservation = false; }
     }
 
     private bool CanLaunch() => backendReady && connected && !busy && !checking && fresh && health == "online" && launchTimezone is not null && snapshot is { } s && Text(s, "session_id") == session && HasScore(s);
@@ -718,6 +816,10 @@ public sealed partial class MainPage : Page
         LogPanel.Visibility = tag == "log" ? Visibility.Visible : Visibility.Collapsed;
         ReadmePanel.Visibility = tag == "readme" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPanel.Visibility = tag == "settings" ? Visibility.Visible : Visibility.Collapsed;
+        UpdateDisplayScheduling();
+        UpdateActivityDisplay();
+        UpdateHealthDisplay();
+        UpdateRefreshButton();
     }
     private void BackgroundPointerPressed(object sender, PointerRoutedEventArgs args)
     {
@@ -814,7 +916,7 @@ public sealed partial class MainPage : Page
     public async Task Shutdown()
     {
         closing = true;
-        timer.Stop();
+        displayTimer.Stop();
         browserLifetime.Cancel();
         if (browserLaunchTask is not null) await browserLaunchTask;
         if (browser is not null) await browser.DisposeAsync();

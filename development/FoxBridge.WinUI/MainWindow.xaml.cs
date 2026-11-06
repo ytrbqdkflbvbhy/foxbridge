@@ -9,6 +9,14 @@ public sealed partial class MainWindow : Window
 {
     private bool closing;
     private bool startupSizeApplied;
+    private bool inputActive = true;
+
+    private void UpdatePageActivity()
+    {
+        if (RootFrame.Content is MainPage page)
+            page.SetWindowActivity(AppWindow.IsVisible &&
+                AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Minimized }, inputActive);
+    }
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr window);
 
@@ -35,6 +43,12 @@ public sealed partial class MainWindow : Window
         AppWindow.Changed += (_, args) =>
         {
             if (args.DidPositionChange || args.DidSizeChange || args.DidPresenterChange) UpdateMinimumSize();
+            if (args.DidVisibilityChange || args.DidSizeChange || args.DidPresenterChange) UpdatePageActivity();
+        };
+        Activated += (_, args) =>
+        {
+            inputActive = args.WindowActivationState != WindowActivationState.Deactivated;
+            UpdatePageActivity();
         };
 #if DEBUG
         var arguments = Environment.GetCommandLineArgs();
@@ -48,6 +62,7 @@ public sealed partial class MainWindow : Window
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
         AppWindow.TitleBar.ButtonForegroundColor = Colors.White;
         RootFrame.Navigate(typeof(MainPage));
+        UpdatePageActivity();
         AppWindow.Closing += async (_, args) =>
         {
             if (closing) return;

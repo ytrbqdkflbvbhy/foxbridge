@@ -47,8 +47,38 @@ def emit(kind, data):
         print(json.dumps({'kind': kind, 'data': data}, ensure_ascii=False), flush=True)
 
 
+class ActivityPublisher:
+    """One bounded stream per visible observer; all state lives on the engine loop."""
+    def __init__(self, engine):
+        self.engine = engine
+        self.task = None
+
+    async def subscribe(self, session_id=None, interval=0):
+        if type(interval) not in (int, float) or interval not in (0, 2, 10):
+            raise BridgeError('Некорректный интервал статистики.')
+        proxy = self.engine.proxy
+        # An old window/session command must not cancel a newer session's stream.
+        if interval and (not proxy or proxy.session_id != session_id):
+            return
+        if self.task:
+            self.task.cancel()
+            await asyncio.gather(self.task, return_exceptions=True)
+            self.task = None
+        if interval and proxy and proxy.session_id == session_id:
+            self.task = asyncio.create_task(self.publish(proxy, interval))
+
+    async def publish(self, proxy, interval):
+        while self.engine.proxy is proxy and proxy.health != 'stopped':
+            proxy.activity_changed.clear()
+            emit('activity', self.engine.stats() | {'session_id': proxy.session_id})
+            # Coalesce traffic bursts, then sleep indefinitely when nothing changes.
+            await asyncio.sleep(interval)
+            await proxy.activity_changed.wait()
+
+
 def main():
     engine = Engine(emit)
+    activity = ActivityPublisher(engine)
     tunnel = None
     check_until = 0
     try:
@@ -69,6 +99,9 @@ def main():
                                       for n, p, d in firefox_profiles(args.get('profiles_ini'))])
                 elif operation == 'activity':
                     emit('activity', engine.stats())
+                elif operation == 'observe_activity':
+                    asyncio.run_coroutine_threadsafe(activity.subscribe(
+                        args.get('session_id'), args.get('interval', 0)), engine.loop).result()
                 elif operation == 'commands':
                     if not engine.proxy or engine.proxy.health != 'online':
                         raise BridgeError('Прокси не готов.')
@@ -113,6 +146,7 @@ def main():
                         raise
                 elif operation in ('load', 'disconnect', 'retry', 'quota', 'check'):
                     if operation == 'disconnect':
+                        asyncio.run_coroutine_threadsafe(activity.subscribe(), engine.loop).result()
                         if tunnel:
                             tunnel.stop()
                             tunnel = None

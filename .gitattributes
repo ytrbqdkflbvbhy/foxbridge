@@ -5,3 +5,4 @@
 *.rtf binary
 *.pem text eol=lf
 development/**/licenses/** -whitespace
+development/**/licenses/** linguist-vendored

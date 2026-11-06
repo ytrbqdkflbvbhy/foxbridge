@@ -122,5 +122,94 @@ class WorkerTests(unittest.TestCase):
             self.assertNotIn('PySide6', result.stderr)
 
 
+class ActivityPublisherTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.events = asyncio.Queue()
+        self.proxy = SimpleNamespace(session_id='current', health='online',
+                                     activity_changed=asyncio.Event(), up=0, down=0, active=0)
+        self.engine = SimpleNamespace(proxy=self.proxy)
+        self.engine.stats = lambda: dict(up=self.proxy.up, down=self.proxy.down,
+                                         active=self.proxy.active, uptime=0)
+        self.publisher = worker.ActivityPublisher(self.engine)
+        self.emit_patch = patch.object(worker, 'emit', side_effect=lambda kind, data:
+                                       self.events.put_nowait((kind, data)))
+        self.emit_patch.start()
+
+    async def asyncTearDown(self):
+        await self.publisher.subscribe()
+        self.emit_patch.stop()
+
+    async def next_event(self):
+        return await asyncio.wait_for(self.events.get(), 3)
+
+    async def test_initial_snapshot_then_no_idle_updates(self):
+        await self.publisher.subscribe('current', 2)
+        kind, data = await self.next_event()
+        self.assertEqual((kind, data['session_id']), ('activity', 'current'))
+        # Wait beyond the rate limit: an idle stream must stay asleep.
+        with self.assertRaises(TimeoutError):
+            await asyncio.wait_for(self.events.get(), 2.1)
+
+    async def test_burst_coalesces_without_losing_final_counters(self):
+        await self.publisher.subscribe('current', 2)
+        await self.next_event()
+        for count in range(1, 101):
+            self.proxy.down = count
+            self.proxy.activity_changed.set()
+        self.assertTrue(self.events.empty())
+        _, data = await self.next_event()
+        self.assertEqual(data['down'], 100)
+        self.assertTrue(self.events.empty())
+        # A change after the publisher is already waiting must wake it too.
+        await asyncio.sleep(2.1)
+        self.proxy.active = 1
+        self.proxy.activity_changed.set()
+        _, data = await self.next_event()
+        self.assertEqual(data['active'], 1)
+
+    async def test_unsubscribe_cancels_stream_and_resume_gets_fresh_snapshot(self):
+        await self.publisher.subscribe('current', 2)
+        await self.next_event()
+        task = self.publisher.task
+        await self.publisher.subscribe()
+        self.assertTrue(task.done())
+        self.assertIsNone(self.publisher.task)
+        self.proxy.up = 123
+        self.proxy.activity_changed.set()
+        self.assertTrue(self.events.empty())
+        await self.publisher.subscribe('current', 2)
+        _, data = await self.next_event()
+        self.assertEqual(data['up'], 123)
+
+    async def test_inactive_subscription_replaces_instead_of_duplicating_task(self):
+        await self.publisher.subscribe('current', 2)
+        await self.next_event()
+        previous = self.publisher.task
+        await self.publisher.subscribe('current', 10)
+        await self.next_event()
+        self.assertTrue(previous.done())
+        self.assertIsNot(previous, self.publisher.task)
+
+    async def test_stale_session_and_invalid_interval_preserve_current_stream(self):
+        await self.publisher.subscribe('current', 2)
+        await self.next_event()
+        task = self.publisher.task
+        await self.publisher.subscribe('old', 2)
+        self.assertIs(self.publisher.task, task)
+        with self.assertRaises(worker.BridgeError):
+            await self.publisher.subscribe('current', float('nan'))
+        self.assertIs(self.publisher.task, task)
+        self.assertFalse(task.done())
+
+    async def test_stopped_proxy_wakes_and_finishes_waiting_publisher(self):
+        await self.publisher.subscribe('current', 2)
+        await self.next_event()
+        await asyncio.sleep(2.1)
+        self.proxy.health = 'stopped'
+        self.proxy.activity_changed.set()
+        await asyncio.wait_for(self.publisher.task, 1)
+        self.assertTrue(self.events.empty())
+
+
 if __name__ == '__main__':
     unittest.main()
