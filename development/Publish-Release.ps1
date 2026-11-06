@@ -9,11 +9,15 @@ if ((Split-Path -Parent $foxStage) -ne $PSScriptRoot -or (Split-Path -Leaf $foxS
     -not (Test-Path -LiteralPath $foxProject)) { throw 'Unexpected application directories' }
 
 if (Test-Path -LiteralPath $foxStage) { Remove-Item -LiteralPath $foxStage -Recurse -Force }
+if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'FoxBridge.WinUI\Tools\SOURCE.txt'))) {
+    & (Join-Path $PSScriptRoot 'Install-TunEngine.ps1')
+}
 dotnet publish $foxProject -c Release -p:Platform=x64 --self-contained false -o $foxStage
 if ($LASTEXITCODE -ne 0) { throw 'Release publish failed; current application was not replaced' }
 foreach ($foxRequired in @('FoxBridge.WinUI.exe', 'FoxBridge.WinUI.dll', 'FoxBridge.WinUI.deps.json',
     'FoxBridge.WinUI.runtimeconfig.json', 'FoxBridge.WinUI.pri', 'App.xbf', 'MainPage.xbf', 'MainWindow.xbf',
-    'Assets\AppIcon.ico', 'Assets\AppIcon.svg', 'Backend\worker.py', 'Backend\bridge.py', 'Backend\cacert.pem')) {
+    'Assets\AppIcon.ico', 'Assets\AppIcon.svg', 'Help\README.md', 'Backend\worker.py', 'Backend\bridge.py', 'Backend\cacert.pem',
+    'Backend\tun.py', 'Backend\tun_host.py', 'Tools\sing-box.exe', 'Tools\GPL-3.0.txt', 'Tools\SOURCE.txt')) {
     if (-not (Test-Path -LiteralPath (Join-Path $foxStage $foxRequired) -PathType Leaf)) {
         throw "Incomplete publish: $foxRequired. Current application was not replaced."
     }

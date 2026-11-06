@@ -10,6 +10,7 @@ public sealed class UiPreferences
     [JsonPropertyName("profiles_ini")] public string ProfilesIni { get; set; } = "";
     [JsonPropertyName("profile_path")] public string ProfilePath { get; set; } = "";
     [JsonPropertyName("port")] public int Port { get; set; } = 8765;
+    [JsonPropertyName("tun")] public bool Tun { get; set; }
     [JsonPropertyName("servers")] public Dictionary<string, SavedServer> Servers { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public static UiPreferences Load(string path)

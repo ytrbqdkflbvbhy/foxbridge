@@ -33,7 +33,11 @@
     <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="[2.6.4]" />
     <Content Include="Assets\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Backend\worker.py" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Backend\tun.py" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Backend\tun_host.py" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Tools\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\README.md" Link="Help\README.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\distribution\README.txt" Link="README.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\distribution\licenses\*" Link="licenses\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

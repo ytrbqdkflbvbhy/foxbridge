@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Security.Principal;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -14,13 +15,19 @@ namespace FoxBridge_WinUI;
 public sealed partial class MainPage : Page
 {
     private readonly BridgeClient client = new();
+    private readonly bool administrator = new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(2) };
     private bool initialized, backendReady, busy, connected, ready, checking, fresh, closing;
     private string? session, launchTimezone;
     private string health = "stopped";
+    private string connectionProgress = "";
     private DateTimeOffset refreshAt = DateTimeOffset.MinValue;
     private JsonElement? snapshot;
     private bool pendingLaunch;
+    private bool browserOpening;
+    private FirefoxSession? browser;
+    private Task? browserLaunchTask;
+    private readonly CancellationTokenSource browserLifetime = new();
     private JsonElement? statisticsData;
     private bool statisticsPreview = false;
     private readonly List<Border> statisticsDividers = [];
@@ -34,6 +41,7 @@ public sealed partial class MainPage : Page
     public MainPage()
     {
         InitializeComponent();
+        InitializeReadme();
         initialized = true;
         client.Message += (kind, data) => DispatcherQueue.TryEnqueue(() => { if (!closing) Handle(kind, data); });
         client.Failed += text => DispatcherQueue.TryEnqueue(() =>
@@ -55,8 +63,16 @@ public sealed partial class MainPage : Page
     {
         Loaded -= Start;
         PageRoot.Focus(FocusState.Programmatic);
+        UpdateNavigationFooter();
 #if DEBUG
         var arguments = Environment.GetCommandLineArgs();
+        if (arguments.Length == 4 && arguments[1] == "--preview-layout")
+        {
+            // Offline layout QA: never opens a Firefox profile or starts the worker.
+            SetQuota(70, "35.00", "ГиБ", "Демонстрационные данные квоты");
+            Render();
+            return;
+        }
         if (arguments.Length == 3 && arguments[1] == "--preview-statistics")
         {
             // Offline visual QA only: no account/profile access or proxy startup.
@@ -79,11 +95,25 @@ public sealed partial class MainPage : Page
             restoringPreferences = true;
             ProfilesPathBox.Text = preferences.ProfilesIni;
             PortBox.Value = preferences.Port;
+            ModeBox.SelectedIndex = preferences.Tun ? 1 : 0;
         }
         catch (Exception) { Log("Сохранённые настройки недоступны. Используем автоматический поиск."); }
         finally { restoringPreferences = false; }
+        AdminWarning.IsOpen = !administrator;
         await InitializeDependencies();
         Render();
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (!closing && Dashboard.Visibility == Visibility.Visible) App.MainWindow?.FitStartupContent(this);
+        });
+    }
+
+    public double MeasureStartupHeight()
+    {
+        if (PageRoot.ActualWidth <= 0) return 0;
+        // Measure natural content height instead of the viewport's stretched height.
+        PageRoot.Measure(new Windows.Foundation.Size(PageRoot.ActualWidth, double.PositiveInfinity));
+        return PageRoot.DesiredSize.Height + Math.Max(0, ActualHeight - ContentScroll.ActualHeight);
     }
 
     private async Task InitializeDependencies()
@@ -126,7 +156,18 @@ public sealed partial class MainPage : Page
         value.ValueKind == JsonValueKind.Object && value.TryGetProperty(key, out var item) && item.TryGetDouble(out var n) ? n : 0;
     private static bool Flag(JsonElement value, string key) =>
         value.ValueKind == JsonValueKind.Object && value.TryGetProperty(key, out var item) && item.ValueKind == JsonValueKind.True;
-    private static bool HasScore(JsonElement value) => value.TryGetProperty("score", out var score) && score.ValueKind == JsonValueKind.Number;
+    private static bool HasScore(JsonElement value) => value.TryGetProperty("score", out var score)
+        && score.ValueKind == JsonValueKind.Number && score.TryGetDouble(out var number) && number is >= 0 and <= 100;
+
+    private void SetScore(double? score)
+    {
+        if (score is not (>= 0 and <= 100)) score = null;
+        ScoreText.Text = score?.ToString("0.#", CultureInfo.InvariantCulture) ?? "—";
+        ScoreBar.Value = score ?? 0;
+        var color = StatisticsFormatter.ScoreColor(score);
+        var brush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, (byte)(color >> 16), (byte)(color >> 8), (byte)color));
+        ScoreText.Foreground = ScoreBar.Foreground = brush;
+    }
 
     private async Task Send(string operation, object? args = null)
     {
@@ -178,7 +219,12 @@ public sealed partial class MainPage : Page
                 ShowQuota(data.GetProperty("quota"));
                 Log($"Профиль загружен. Серверов: {ServerBox.Items.Count}.");
                 break;
+            case "connect_progress":
+                connectionProgress = Text(data, "message");
+                Log(connectionProgress);
+                break;
             case "connect":
+                connectionProgress = "";
                 busy = false;
                 connected = true;
                 fresh = false;
@@ -191,16 +237,17 @@ public sealed partial class MainPage : Page
                 session = Text(data, "session_id");
                 activePort = (int)Number(data, "port");
                 health = Text(data.GetProperty("health"), "state", "online");
-                refreshAt = DateTimeOffset.MinValue;
-                ScoreText.Text = "—";
-                ScoreBar.Value = 0;
+                refreshAt = Flag(data, "prechecked") ? DateTimeOffset.UtcNow.AddSeconds(10) : DateTimeOffset.MinValue;
+                SetScore(null);
                 Notice.IsOpen = false;
-                Log("Прокси включён. Запрашиваем оценку и часовой пояс.");
-                await Check();
+                Log(Flag(data, "tun") ? "TUN включён для компьютера. TCP и DNS идут через FoxBridge; остальной UDP блокируется."
+                    : "Прокси включён. Запрашиваем оценку и часовой пояс.");
+                if (!Flag(data, "prechecked")) await Check();
                 break;
             case "disconnect":
                 busy = false;
                 connected = checking = fresh = false;
+                SetScore(null);
                 session = launchTimezone = null;
                 health = "stopped";
                 ScoreNote.Text = "Прокси выключен. Предыдущая оценка неактуальна.";
@@ -230,6 +277,7 @@ public sealed partial class MainPage : Page
                 ShowStatistics(data);
                 if (!HasScore(data))
                 {
+                    SetScore(null);
                     fresh = false;
                     ShowError("Не удалось получить score Net.Coffee. Попробуйте обновить оценку.");
                     ScoreNote.Text = "Оценка не обновлена. Предыдущие данные неактуальны.";
@@ -237,11 +285,15 @@ public sealed partial class MainPage : Page
                 }
                 snapshot = data;
                 fresh = health == "online";
-                ScoreText.Text = Number(data, "score").ToString("0.#", CultureInfo.InvariantCulture);
-                ScoreBar.Value = Number(data, "score");
+                SetScore(Number(data, "score"));
                 ScoreNote.Text = $"Проверено: {DateTime.Now:HH:mm:ss} · IP {Text(data, "ip")}";
                 PrepareTimezone(data);
                 Log("Оценка Net.Coffee получена.");
+                break;
+            case "tun_lost":
+                ShowError("TUN неожиданно остановился. Подключение отключается; Windows возвращается к обычному доступу в сеть.");
+                busy = true;
+                await Send("disconnect");
                 break;
             case "quota": ShowQuota(data); break;
             case "commands":
@@ -251,10 +303,12 @@ public sealed partial class MainPage : Page
                 break;
             case "warning": Log(data.GetString() ?? "Предупреждение сети"); break;
             case "error":
+                connectionProgress = "";
                 var operation = Text(data, "operation");
                 if (operation == "check")
                 {
                     if (Text(data, "session_id") != session) break;
+                    SetScore(null);
                     checking = false;
                     fresh = false;
                     refreshAt = Max(refreshAt, DateTimeOffset.UtcNow.AddSeconds(Number(data, "retry_after")));
@@ -375,13 +429,12 @@ public sealed partial class MainPage : Page
             var zone = TimeZoneInfo.FindSystemTimeZoneById(candidate);
             var offset = zone.GetUtcOffset(DateTimeOffset.UtcNow);
             launchTimezone = candidate;
-            LaunchNote.Text = $"TZ: {candidate} · UTC{(offset < TimeSpan.Zero ? "−" : "+")}{offset.Duration():hh\\:mm}. " + (Flag(data, "timezone_estimated")
-                ? "Приблизительный пояс по стране Net.Coffee. TZ будет передан новому терминалу и его дочерним процессам."
-                : "Пояс из ответа Net.Coffee. TZ будет передан новому терминалу и его дочерним процессам.");
+            LaunchNote.Text = $"TZ терминала: {candidate} · UTC{(offset < TimeSpan.Zero ? "−" : "+")}{offset.Duration():hh\\:mm}. " + (Flag(data, "timezone_estimated")
+                ? "Приблизительный пояс по стране Net.Coffee." : "Пояс из ответа Net.Coffee.");
         }
         catch (Exception error) when (error is TimeZoneNotFoundException or InvalidTimeZoneException)
         {
-            LaunchNote.Text = "Обновите оценку. Запуск терминала ждёт корректного пояса Net.Coffee.";
+            LaunchNote.Text = "Обновите оценку. Для терминала нужен корректный пояс Net.Coffee.";
         }
     }
 
@@ -399,11 +452,16 @@ public sealed partial class MainPage : Page
     private void Render()
     {
         if (!initialized) return;
+        UpdateNoticesVisibility();
         BusyRing.IsActive = busy || checking;
-        StatusText.Text = busy ? "Подождите…" : connected ? health == "online" ? "Подключено" : "Восстанавливаем канал" : ready ? "Готово к подключению" : "Не подключено";
+        StatusText.Text = busy ? connectionProgress.Length > 0 ? connectionProgress : "Подождите…" : connected ? health == "online" ? "Подключено" : "Восстанавливаем канал" : ready ? "Готово к подключению" : "Не подключено";
         StateDot.Fill = new SolidColorBrush(connected && health == "online" ? Windows.UI.Color.FromArgb(255, 108, 214, 167) : busy || connected ? Windows.UI.Color.FromArgb(255, 255, 170, 123) : Colors.Gray);
-        ConnectButton.Content = connected ? "Выключить прокси" : "Включить прокси";
-        ConnectButton.IsEnabled = backendReady && !busy && (connected || ready && ServerBox.SelectedItem is not null);
+        var tun = ModeBox.SelectedIndex == 1;
+        ConnectButton.Content = connected ? tun ? "Отключить TUN" : "Выключить прокси" : tun ? "Подключить TUN" : "Включить прокси";
+        ConnectButton.IsEnabled = backendReady && !busy && (connected || ready && ServerBox.SelectedItem is not null && (!tun || administrator));
+        ModeBox.IsEnabled = !busy && !connected;
+        ModeNote.Text = tun ? "Для направления всего трафика через прокси."
+            : "Для терминала и Firefox.";
         ProfileBox.IsEnabled = LoadButton.IsEnabled = backendReady && !busy && !connected;
         LoadButton.IsEnabled &= ProfileBox.SelectedItem is not null;
         ServerBox.IsEnabled = ready && !busy && !connected;
@@ -414,6 +472,8 @@ public sealed partial class MainPage : Page
         RefreshStatsButton.IsEnabled = backendReady && connected && !busy && !checking && wait == 0;
         RefreshStatsButton.Content = checking ? "Проверяем…" : wait > 0 && connected ? $"Обновить через {wait} с" : "Обновить оценку";
         ShellButton.IsEnabled = CanLaunch() && !pendingLaunch;
+        BrowserButton.IsEnabled = CanLaunchBrowser() && !browserOpening;
+        BrowserButtonText.Text = browserOpening ? "Запускаем Firefox…" : "Открыть Firefox";
         RetryButton.Visibility = connected && health == "recovering" ? Visibility.Visible : Visibility.Collapsed;
         AddressText.Text = $"127.0.0.1:{(connected ? activePort : (int)(double.IsNaN(PortBox.Value) ? 8765 : PortBox.Value))}";
         if (!connected) LaunchNote.Text = "Включите прокси и дождитесь оценки IP и подготовки часового пояса.";
@@ -425,6 +485,7 @@ public sealed partial class MainPage : Page
     }
 
     private bool CanLaunch() => backendReady && connected && !busy && !checking && fresh && health == "online" && launchTimezone is not null && snapshot is { } s && Text(s, "session_id") == session && HasScore(s);
+    private bool CanLaunchBrowser() => backendReady && connected && !busy && !checking && fresh && health == "online" && snapshot is { } s && Text(s, "session_id") == session && HasScore(s);
     private static DateTimeOffset Max(DateTimeOffset a, DateTimeOffset b) => a > b ? a : b;
     private static string Bytes(double n) => n >= 1073741824 ? $"{n / 1073741824:0.00} ГиБ" : $"{n / 1048576:0.00} МиБ";
     private void ShowQuota(JsonElement quota)
@@ -453,18 +514,24 @@ public sealed partial class MainPage : Page
     }
     private void SetQuota(double percent, string value, string unit, string description)
     {
-        QuotaRing.Value = percent;
+        QuotaBar.Value = percent;
         QuotaValue.Text = value;
         QuotaUnit.Text = unit;
         ToolTipService.SetToolTip(QuotaCard, description);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(QuotaRing, description);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(QuotaBar, description);
     }
     private void Log(string text)
     {
         LogText.Text += $"{DateTime.Now:HH:mm:ss}  {text}\n";
         if (LogText.Text.Length > 24000) LogText.Text = LogText.Text[^18000..];
     }
-    private void ShowError(string text) { Notice.Message = text; Notice.IsOpen = true; Log(text); }
+    private void ShowError(string text) { Notice.Message = text; Notice.IsOpen = true; UpdateNoticesVisibility(); Log(text); }
+    private void WarningClosed(InfoBar sender, InfoBarClosedEventArgs args) => UpdateNoticesVisibility();
+    private void UpdateNoticesVisibility()
+    {
+        if (NoticesPanel is not null && Notice is not null && AdminWarning is not null)
+            NoticesPanel.Visibility = Notice.IsOpen || AdminWarning.IsOpen ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     private async Task Discover()
     {
@@ -514,7 +581,10 @@ public sealed partial class MainPage : Page
     }
     private async void ToggleConnection(object sender, RoutedEventArgs e)
     {
+        connectionProgress = "";
         if (busy || !backendReady) return;
+        if (!connected && ModeBox.SelectedIndex == 1 && !administrator)
+        { AdminWarning.IsOpen = true; return; }
         if (!connected && (!ready || ServerBox.SelectedItem is not ComboBoxItem)) return;
         if (!connected && (!double.IsFinite(PortBox.Value) || PortBox.Value != Math.Truncate(PortBox.Value) || PortBox.Value < 1024 || PortBox.Value > 65535))
         { ShowError("Укажите целый порт от 1024 до 65535."); return; }
@@ -527,8 +597,15 @@ public sealed partial class MainPage : Page
             if (ProfileBox.SelectedItem is ComboBoxItem profile && index < availableServers.Count)
                 preferences.Servers[(string)profile.Tag] = availableServers[index];
             PersistPreferences();
-            await Send("connect", new { server_index = index, port = (int)PortBox.Value });
+            await Send("connect", new { server_index = index, port = (int)PortBox.Value, tun = ModeBox.SelectedIndex == 1 });
         }
+    }
+    private void ModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!initialized || restoringPreferences) return;
+        preferences.Tun = ModeBox.SelectedIndex == 1;
+        PersistPreferences();
+        Render();
     }
     private async Task Check()
     {
@@ -540,6 +617,54 @@ public sealed partial class MainPage : Page
     private async void RefreshStatistics(object sender, RoutedEventArgs e) => await Check();
     private async void RetryConnection(object sender, RoutedEventArgs e) => await Send("retry", new { session_id = session });
     private async void OpenShell(object sender, RoutedEventArgs e) => await RequestCommands();
+    private async void OpenBrowser(object sender, RoutedEventArgs e)
+    {
+        if (!CanLaunchBrowser() || browserOpening) return;
+        browserLaunchTask = LaunchBrowser();
+        await browserLaunchTask;
+    }
+    private async Task LaunchBrowser()
+    {
+        browserOpening = true;
+        Render();
+        var launchSession = session;
+        var profilePath = (ProfileBox.SelectedItem as ComboBoxItem)?.Tag as string;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(profilePath)) throw new InvalidOperationException("Выберите и загрузите профиль Firefox для VPN.");
+            if (browser is { IsOpen: true })
+            {
+                if (browser.Port != activePort || !string.Equals(browser.ProfilePath, Path.GetFullPath(profilePath), StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Закройте Firefox FoxBridge перед запуском с другим профилем или портом.");
+                await browser.OpenTab(browserLifetime.Token);
+            }
+            else
+            {
+                if (browser is not null) await browser.DisposeAsync();
+                browser = null;
+                browser = await FirefoxSession.Start(activePort, profilePath, browserLifetime.Token);
+            }
+            if (closing || !CanLaunchBrowser() || session != launchSession)
+            {
+                await browser.DisposeAsync();
+                browser = null;
+                if (!closing) ShowError("Подключение изменилось во время запуска Firefox. Повторите запуск после проверки IP.");
+                return;
+            }
+            Log("Firefox открыт с выбранным VPN-профилем через прокси. Язык и часовой пояс браузера не изменяются.");
+        }
+        catch (Exception error)
+        {
+            if (!closing) ShowError(error is OperationCanceledException
+                ? "Firefox не успел открыть профиль. Закройте его окно и повторите запуск."
+                : error is InvalidOperationException ? error.Message : "Не удалось открыть Firefox. Закройте Firefox FoxBridge и повторите запуск.");
+        }
+        finally
+        {
+            browserOpening = false;
+            if (!closing) Render();
+        }
+    }
     private async Task RequestCommands()
     {
         if (!CanLaunch() || pendingLaunch) return;
@@ -559,7 +684,7 @@ public sealed partial class MainPage : Page
             foreach (var key in new[] { "HTTP_PROXY", "HTTPS_PROXY", "WS_PROXY", "WSS_PROXY" }) start.Environment[key] = $"http://127.0.0.1:{activePort}";
             start.Environment["NO_PROXY"] = "localhost,127.0.0.1,::1";
             start.Environment["TZ"] = launchTimezone!;
-            Process.Start(start);
+            using var terminal = Process.Start(start) ?? throw new IOException();
             Log($"Открыт PowerShell с прокси и TZ={launchTimezone}.");
         }
         catch (Exception) { ShowError("Не удалось открыть защищённый терминал."); }
@@ -614,24 +739,85 @@ public sealed partial class MainPage : Page
     {
         if (QuotaCard is null) return;
         var narrow = args.NewSize.Width < 650;
-        ProfileCards.ColumnDefinitions[1].Width = narrow ? new GridLength(0) : new GridLength(176);
+        ProfileCards.RowSpacing = narrow ? 18 : 0;
+        ProfileCards.ColumnDefinitions[1].Width = narrow ? new GridLength(0) : new GridLength(220);
         Grid.SetColumn(QuotaCard, narrow ? 0 : 1);
         Grid.SetRow(QuotaCard, narrow ? 1 : 0);
-        QuotaCard.HorizontalAlignment = narrow ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
+        Grid.SetColumnSpan(ProfileCard, narrow ? 2 : 1);
+        Grid.SetColumnSpan(QuotaCard, narrow ? 2 : 1);
+        QuotaCard.HorizontalAlignment = HorizontalAlignment.Stretch;
+    }
+    private void AdaptNavigation(NavigationView sender, NavigationViewDisplayModeChangedEventArgs args)
+    {
+        UpdateNavigationFooter();
+    }
+    private void UpdateNavigationFooter()
+    {
+        if (NavigationFooter is not null)
+            NavigationFooter.Visibility = Navigation.IsPaneOpen ? Visibility.Visible : Visibility.Collapsed;
+    }
+    private void NavigationPaneOpened(NavigationView sender, object args) => UpdateNavigationFooter();
+    private void NavigationPaneClosing(NavigationView sender, NavigationViewPaneClosingEventArgs args)
+    {
+        if (NavigationFooter is not null) NavigationFooter.Visibility = Visibility.Collapsed;
+    }
+    private void AdaptPage(object sender, SizeChangedEventArgs args)
+    {
+        if (PageRoot is null || TerminalCard is null) return;
+        var panoramic = args.NewSize.Width >= 1450 && args.NewSize.Height < 720;
+        var compact = args.NewSize.Width >= 740 && args.NewSize.Height < 620;
+        PageRoot.MaxWidth = panoramic ? 1800 : 1200;
+        PageRoot.Padding = compact ? new Thickness(20, 10, 20, 16)
+            : args.NewSize.Width < 700 ? new Thickness(16, 14, 16, 20) : new Thickness(28, 14, 28, 28);
+        Dashboard.ColumnDefinitions[0].Width = panoramic ? new GridLength(300) : new GridLength(1, GridUnitType.Star);
+        Dashboard.ColumnDefinitions[1].Width = panoramic ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        Grid.SetColumnSpan(ProfileCards, panoramic ? 1 : 2);
+        Grid.SetColumn(TopCards, panoramic ? 1 : 0);
+        Grid.SetRow(TopCards, panoramic ? 1 : 2);
+        Grid.SetColumnSpan(TopCards, panoramic ? 1 : 2);
+        Grid.SetRow(DashboardFooter, panoramic ? 2 : 3);
+        DashboardHeader.Margin = new Thickness(0, 0, 0, compact ? 12 : 18);
+        ProfileCards.Margin = new Thickness(0, 0, 0, panoramic ? 0 : compact ? 12 : 18);
+        TopCards.Margin = new Thickness(0, 0, 0, compact ? 12 : 18);
+        ConnectionCard.Padding = ScoreCard.Padding = TerminalCard.Padding = new Thickness(compact ? 16 : 24);
+        ConnectionContent.Spacing = compact ? 10 : 17;
+        ScoreContent.Spacing = TerminalContent.Spacing = compact ? 10 : 16;
+        RouteSideCards.Spacing = compact ? 12 : 18;
+        ScoreText.FontSize = compact ? 44 : 64;
+        ScoreNote.MinHeight = compact ? 0 : 48;
+        ConnectButton.Height = compact ? 36 : 44;
+    }
+    private void AdaptProfileControls(object sender, SizeChangedEventArgs args)
+    {
+        if (LoadButton is null) return;
+        var narrow = args.NewSize.Width < 460;
+        ProfileControls.RowSpacing = narrow ? 12 : 0;
+        ProfileControls.ColumnDefinitions[1].Width = narrow ? new GridLength(0) : GridLength.Auto;
+        Grid.SetColumn(LoadButton, narrow ? 0 : 1);
+        Grid.SetRow(LoadButton, narrow ? 1 : 0);
+        Grid.SetColumnSpan(ProfileBox, narrow ? 2 : 1);
+        Grid.SetColumnSpan(LoadButton, narrow ? 2 : 1);
+        LoadButton.HorizontalAlignment = narrow ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
     }
     private void AdaptCards(object sender, SizeChangedEventArgs args)
     {
-        if (ScoreCard is null) return;
+        if (RouteSideCards is null) return;
         var narrow = args.NewSize.Width < 740;
-        Grid.SetColumn(ScoreCard, narrow ? 0 : 1);
-        Grid.SetRow(ScoreCard, narrow ? 1 : 0);
+        TopCards.RowSpacing = narrow ? 18 : 0;
+        TopCards.ColumnDefinitions[0].Width = narrow ? new GridLength(1, GridUnitType.Star) : new GridLength(1.6, GridUnitType.Star);
+        TopCards.ColumnDefinitions[1].Width = narrow ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        Grid.SetColumn(RouteSideCards, narrow ? 0 : 1);
+        Grid.SetRow(RouteSideCards, narrow ? 1 : 0);
         Grid.SetColumnSpan(ConnectionCard, narrow ? 2 : 1);
-        Grid.SetColumnSpan(ScoreCard, narrow ? 2 : 1);
+        Grid.SetColumnSpan(RouteSideCards, narrow ? 2 : 1);
     }
     public async Task Shutdown()
     {
         closing = true;
         timer.Stop();
+        browserLifetime.Cancel();
+        if (browserLaunchTask is not null) await browserLaunchTask;
+        if (browser is not null) await browser.DisposeAsync();
         await client.Stop();
     }
 }

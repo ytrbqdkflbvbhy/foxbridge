@@ -10,6 +10,17 @@ internal record StatisticLine(string Label, string Value = "", bool Heading = fa
 /// <summary>Provider values remain plain text; missing values are distinct from false/zero.</summary>
 internal static class StatisticsFormatter
 {
+    // Exact score colors from https://ip.net.coffee/claude/claude-page.js.
+    internal static uint ScoreColor(double? score) => score switch
+    {
+        >= 95 and <= 100 => 0xFF22C55E,
+        >= 80 and < 95 => 0xFF16A34A,
+        >= 50 and < 80 => 0xFF84CC16,
+        >= 25 and < 50 => 0xFFEAB308,
+        >= 0 and < 25 => 0xFFEF4444,
+        _ => 0xFF9CA3AF
+    };
+
     // Net.Coffee claude-page.js: score gauge, boolTag and residential property tag.
     private static readonly HashSet<string> RestrictedCountries =
         ["CN", "HK", "MO", "RU", "KP", "IR", "SY", "CU", "BY", "VE"];

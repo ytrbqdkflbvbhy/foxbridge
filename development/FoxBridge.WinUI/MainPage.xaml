@@ -37,12 +37,10 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="local:QuotaIndicator">
-                        <Viewbox>
-                            <Grid Width="104" Height="104">
-                                <Path x:Name="Indicator" Stroke="{TemplateBinding Foreground}" StrokeThickness="6"
-                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                            </Grid>
-                        </Viewbox>
+                        <Grid Height="6">
+                            <Border CornerRadius="3" Background="{ThemeResource ControlStrongFillColorDefaultBrush}"/>
+                            <Border x:Name="Indicator" CornerRadius="3" Background="{TemplateBinding Foreground}" HorizontalAlignment="Left"/>
+                        </Grid>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -66,8 +64,10 @@
         </Style>
       </ResourceDictionary>
     </Page.Resources>
-    <NavigationView x:Name="Navigation" PaneDisplayMode="Left" OpenPaneLength="190"
-        IsBackButtonVisible="Collapsed" IsPaneToggleButtonVisible="False" IsPaneOpen="True"
+    <NavigationView x:Name="Navigation" PaneDisplayMode="Auto" OpenPaneLength="190"
+        ExpandedModeThresholdWidth="1000" CompactModeThresholdWidth="0"
+        DisplayModeChanged="AdaptNavigation" PaneOpened="NavigationPaneOpened" PaneClosing="NavigationPaneClosing"
+        IsBackButtonVisible="Collapsed" IsPaneToggleButtonVisible="True"
         IsSettingsVisible="True" SelectionChanged="Navigate">
         <NavigationView.MenuItems>
             <NavigationViewItem Content="Подключение" Tag="dashboard" IsSelected="True"><NavigationViewItem.Icon><FontIcon Glyph="&#xE774;"/></NavigationViewItem.Icon></NavigationViewItem>
@@ -76,56 +76,62 @@
             <NavigationViewItem Content="Readme" Tag="readme"><NavigationViewItem.Icon><FontIcon Glyph="&#xE8A5;"/></NavigationViewItem.Icon></NavigationViewItem>
         </NavigationView.MenuItems>
         <NavigationView.PaneFooter>
-            <StackPanel Margin="16,0,12,22" Spacing="5">
+            <StackPanel x:Name="NavigationFooter" Margin="16,0,12,22" Spacing="5" Visibility="Collapsed">
                 <TextBlock Text="FIREFOX VPN" FontSize="10" CharacterSpacing="140" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                 <TextBlock Text="Локальный мост" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             </StackPanel>
         </NavigationView.PaneFooter>
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <Grid x:Name="PageRoot" Padding="28,14,28,28" MaxWidth="1200" HorizontalAlignment="Stretch"
+        <ScrollViewer x:Name="ContentScroll" HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled"
+                      HorizontalContentAlignment="Stretch" VerticalScrollBarVisibility="Auto" SizeChanged="AdaptPage">
+            <Grid x:Name="PageRoot" Padding="28,14,28,28" MaxWidth="1200" HorizontalAlignment="Center"
+                  Width="{Binding ViewportWidth, ElementName=ContentScroll}"
                   IsTabStop="True" UseSystemFocusVisuals="False" Background="Transparent"
                   PointerPressed="BackgroundPointerPressed">
-                <StackPanel x:Name="Dashboard" Spacing="18">
-                    <StackPanel Spacing="6" Margin="0,0,0,6">
-                        <TextBlock Text="Подключение" Style="{ThemeResource TitleTextBlockStyle}"/>
-                        <TextBlock Text="Выберите маршрут. Подготовьте терминал. Начните работу." Style="{StaticResource Muted}"/>
+                <Grid x:Name="Dashboard" ColumnSpacing="18" VerticalAlignment="Top">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <StackPanel x:Name="DashboardHeader" Grid.ColumnSpan="2" Spacing="18" Margin="0,0,0,18">
+                    <TextBlock Text="Подключение" Style="{ThemeResource TitleTextBlockStyle}"/>
+                    <StackPanel x:Name="NoticesPanel" Spacing="8" Visibility="Collapsed">
+                    <InfoBar x:Name="Notice" IsOpen="False" IsClosable="True" Severity="Warning" Closed="WarningClosed"/>
+                    <InfoBar x:Name="AdminWarning" IsOpen="False" IsClosable="True" Severity="Warning"
+                             Title="Запуск без прав администратора"
+                             Message="TUN недоступен. Для подключения всего компьютера закройте FoxBridge и запустите его от имени администратора. Режим для CLI доступен." Closed="WarningClosed"/>
                     </StackPanel>
-                    <InfoBar x:Name="Notice" IsOpen="False" IsClosable="True" Severity="Warning"/>
-                    <Grid x:Name="ProfileCards" ColumnSpacing="18" RowSpacing="18" SizeChanged="AdaptProfileCards">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="176"/></Grid.ColumnDefinitions>
+                    </StackPanel>
+                    <Grid x:Name="ProfileCards" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,18" VerticalAlignment="Top" ColumnSpacing="18" RowSpacing="18" SizeChanged="AdaptProfileCards">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="220"/></Grid.ColumnDefinitions>
                         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border x:Name="ProfileCard" Style="{StaticResource Card}" MinHeight="176">
-                        <StackPanel Spacing="18" VerticalAlignment="Center">
+                    <Border x:Name="ProfileCard" Style="{StaticResource Card}" Padding="20,16">
+                        <StackPanel Spacing="10" VerticalAlignment="Center">
                             <TextBlock Text="Профиль Firefox" FontWeight="SemiBold"/>
-                            <Grid ColumnSpacing="12">
+                            <Grid x:Name="ProfileControls" ColumnSpacing="12" RowSpacing="12" SizeChanged="AdaptProfileControls">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                                 <ComboBox x:Name="ProfileBox" PlaceholderText="Поиск профилей…" SelectionChanged="ProfileChanged" HorizontalAlignment="Stretch"/>
                                 <Button x:Name="LoadButton" Grid.Column="1" Content="Загрузить профиль" Click="LoadProfile"/>
                             </Grid>
                         </StackPanel>
                     </Border>
-                    <Border x:Name="QuotaCard" Grid.Column="1" Style="{StaticResource Card}" Width="176" Height="176" Padding="16"
+                    <Border x:Name="QuotaCard" Grid.Column="1" Style="{StaticResource Card}" Padding="20,16"
                             ToolTipService.ToolTip="Квота Mozilla появится после загрузки профиля">
-                        <StackPanel Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <TextBlock Text="Осталось" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                            <Grid Width="104" Height="104">
-                                <Ellipse Width="98" Height="98" StrokeThickness="6" Stroke="{ThemeResource ControlStrongFillColorDefaultBrush}"/>
-                                <local:QuotaIndicator x:Name="QuotaRing" Width="104" Height="104" Style="{StaticResource QuotaIndicatorStyle}"
-                                              Value="0" Maximum="100" Foreground="{StaticResource FoxAccent}"
-                                              AutomationProperties.Name="Остаток квоты Mozilla"/>
-                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="1" IsHitTestVisible="False">
-                                    <TextBlock x:Name="QuotaValue" Text="…" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                                    <TextBlock x:Name="QuotaUnit" Text="Нет данных" FontSize="10" Style="{StaticResource Muted}" HorizontalAlignment="Center"/>
-                                </StackPanel>
-                            </Grid>
+                        <StackPanel Spacing="10" VerticalAlignment="Center">
+                            <TextBlock Text="Осталось" FontWeight="SemiBold"/>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock x:Name="QuotaValue" Text="…" FontSize="18" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="QuotaUnit" Text="Нет данных" Style="{StaticResource Muted}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <local:QuotaIndicator x:Name="QuotaBar" Height="6" Style="{StaticResource QuotaIndicatorStyle}"
+                                                 Value="0" Maximum="100" Foreground="{StaticResource FoxAccent}"
+                                                 AutomationProperties.Name="Остаток квоты Mozilla"/>
                         </StackPanel>
                     </Border>
                     </Grid>
-                    <Grid x:Name="TopCards" ColumnSpacing="18" RowSpacing="18" SizeChanged="AdaptCards">
+                    <Grid x:Name="TopCards" Grid.Row="2" Grid.ColumnSpan="2" Margin="0,0,0,18" ColumnSpacing="18" RowSpacing="18" SizeChanged="AdaptCards">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="1.6*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                         <Border x:Name="ConnectionCard" Style="{StaticResource Card}">
-                            <StackPanel Spacing="17">
+                            <StackPanel x:Name="ConnectionContent" Spacing="17">
                                 <Grid>
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <Ellipse x:Name="StateDot" Width="8" Height="8" Fill="#929292" VerticalAlignment="Center"/>
@@ -146,41 +152,51 @@
                                     </StackPanel>
                                     <NumberBox x:Name="PortBox" Grid.Column="1" Header="Порт" Value="8765" Minimum="1024" Maximum="65535" SpinButtonPlacementMode="Hidden" ValueChanged="PortChanged"/>
                                 </Grid>
+                                <ComboBox x:Name="ModeBox" Header="Режим подключения" HorizontalAlignment="Stretch" SelectedIndex="0" SelectionChanged="ModeChanged">
+                                    <ComboBoxItem Content="Отдельные приложения"/>
+                                    <ComboBoxItem Content="Весь компьютер · TUN"/>
+                                </ComboBox>
+                                <TextBlock x:Name="ModeNote" Style="{StaticResource Muted}" FontSize="12"/>
                                 <Button x:Name="ConnectButton" Content="Включить прокси" Click="ToggleConnection" HorizontalAlignment="Stretch" Height="44" IsEnabled="False" Style="{ThemeResource AccentButtonStyle}"/>
                                 <Button x:Name="RetryButton" Content="Повторить подключение" Click="RetryConnection" Visibility="Collapsed" HorizontalAlignment="Stretch"/>
                             </StackPanel>
                         </Border>
-                        <Border x:Name="ScoreCard" Grid.Column="1" Style="{StaticResource Card}">
-                            <StackPanel Spacing="16">
+                        <StackPanel x:Name="RouteSideCards" Grid.Column="1" Spacing="18">
+                        <Border x:Name="ScoreCard" Style="{StaticResource Card}">
+                            <StackPanel x:Name="ScoreContent" Spacing="16">
                                 <StackPanel Spacing="5">
                                     <TextBlock Text="Доверие к IP" FontWeight="SemiBold"/>
                                     <TextBlock Text="NET.COFFEE" FontSize="10" CharacterSpacing="110" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,5,0,0">
-                                    <TextBlock x:Name="ScoreText" Text="—" FontSize="64" FontWeight="SemiBold" Foreground="{StaticResource FoxAccent}"/>
+                                    <TextBlock x:Name="ScoreText" Text="—" FontSize="64" FontWeight="SemiBold" Foreground="#9CA3AF"/>
                                     <TextBlock Text="/ 100" Style="{StaticResource Muted}" VerticalAlignment="Bottom" Margin="0,0,0,14"/>
                                 </StackPanel>
-                                <ProgressBar x:Name="ScoreBar" Value="0" Maximum="100" Foreground="{StaticResource FoxAccent}"/>
+                                <ProgressBar x:Name="ScoreBar" Value="0" Maximum="100" Foreground="#9CA3AF"/>
                                 <TextBlock x:Name="ScoreNote" Text="Оценка появится после подключения и проверки выходного IP." Style="{StaticResource Muted}" MinHeight="48"/>
                                 <Button x:Name="RefreshStatsButton" Content="Обновить оценку" Click="RefreshStatistics" IsEnabled="False" HorizontalAlignment="Stretch"/>
                                 <TextBlock Text="Оценка Net.Coffee, не рейтинг Anthropic" Style="{StaticResource Muted}" FontSize="11"/>
                             </StackPanel>
                         </Border>
-                    </Grid>
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel Spacing="16">
+                    <Border x:Name="TerminalCard" Style="{StaticResource Card}">
+                        <StackPanel x:Name="TerminalContent" Spacing="16">
                             <StackPanel Orientation="Horizontal" Spacing="10">
                                 <FontIcon Glyph="&#xE756;" Foreground="{StaticResource FoxAccent}" FontSize="18"/>
-                                <TextBlock Text="Защищённый терминал" FontWeight="SemiBold"/>
+                                <TextBlock Text="Защищённые приложения" FontWeight="SemiBold"/>
                             </StackPanel>
                             <Button x:Name="ShellButton" Click="OpenShell" IsEnabled="False" HorizontalAlignment="Stretch">
-                                <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE756;" FontSize="14"/><TextBlock Text="Открыть защищённый терминал"/></StackPanel>
+                                <TextBlock Text="Открыть защищённый терминал" TextWrapping="Wrap" TextAlignment="Center"/>
+                            </Button>
+                            <Button x:Name="BrowserButton" Click="OpenBrowser" IsEnabled="False" HorizontalAlignment="Stretch">
+                                <TextBlock x:Name="BrowserButtonText" Text="Открыть Firefox" TextWrapping="Wrap" TextAlignment="Center"/>
                             </Button>
                             <TextBlock x:Name="LaunchNote" Text="Включите прокси и дождитесь оценки IP и подготовки часового пояса." Style="{StaticResource Muted}"/>
                         </StackPanel>
                     </Border>
-                    <TextBlock Text="Локальный прокси через Firefox VPN · Неофициальный клиент" Style="{StaticResource Muted}" FontSize="11" Margin="2,0,0,0"/>
-                </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock x:Name="DashboardFooter" Grid.Row="3" Grid.ColumnSpan="2" Text="Локальный прокси через Firefox VPN · Неофициальный клиент" Style="{StaticResource Muted}" FontSize="11" Margin="2,0,0,0"/>
+                </Grid>
                 <StackPanel x:Name="DetailsPanel" Spacing="18" Visibility="Collapsed">
                     <TextBlock Text="Статистика соединения" Style="{ThemeResource TitleTextBlockStyle}"/>
                     <Border Style="{StaticResource Card}"><StackPanel Spacing="10"><TextBlock Text="Активность" FontWeight="SemiBold"/><TextBlock x:Name="ActivityText" Text="Прокси выключен" Style="{StaticResource Muted}"/><TextBlock x:Name="ChannelText" Text="Канал не запущен" Style="{StaticResource Muted}"/></StackPanel></Border>
@@ -201,41 +217,10 @@
                 </StackPanel>
                 <StackPanel x:Name="ReadmePanel" Spacing="18" Visibility="Collapsed">
                     <StackPanel Spacing="6">
-                        <TextBlock Text="Readme" Style="{ThemeResource TitleTextBlockStyle}"/>
-                        <TextBlock Text="Назначение, порядок работы и границы защиты FoxBridge" Style="{StaticResource Muted}"/>
+                        <TextBlock Text="Readme и FAQ" Style="{ThemeResource TitleTextBlockStyle}"/>
+                        <TextBlock Text="Текущие возможности, порядок работы и ответы на вопросы" Style="{StaticResource Muted}"/>
                     </StackPanel>
-                    <Border Style="{StaticResource Card}"><StackPanel Spacing="12">
-                        <TextBlock Text="О приложении" FontSize="18" FontWeight="SemiBold"/>
-                        <TextBlock Style="{StaticResource ReadmeText}" Text="FoxBridge предоставляет локальный доступ к прокси Firefox VPN и подготавливает PowerShell для работы с CLI. Данные выбранного профиля Firefox используются для авторизации и получения доступных серверов.&#xA;&#xA;Это неофициальный клиент. Доступность сервиса и квота зависят от аккаунта Mozilla."/>
-                    </StackPanel></Border>
-                    <Border Style="{StaticResource Card}"><StackPanel Spacing="12">
-                        <TextBlock Text="Принцип работы" FontSize="18" FontWeight="SemiBold"/>
-                        <TextBlock Style="{StaticResource ReadmeText}" Text="Приложение открывает HTTP прокси на адресе 127.0.0.1 и выбранном порту. Запросы передаются через авторизованный сервер Firefox VPN. Для HTTPS используется туннель CONNECT. FoxBridge не расшифровывает содержимое HTTPS и не устанавливает сертификат для его перехвата.&#xA;&#xA;Системные настройки прокси и часовой пояс Windows сохраняются. Прокси действует для приложений, которым явно задан его адрес. В открытом через FoxBridge терминале адрес передаётся через переменные окружения. Программы должны поддерживать эти переменные."/>
-                    </StackPanel></Border>
-                    <Border Style="{StaticResource Card}"><StackPanel Spacing="12">
-                        <TextBlock Text="Порядок работы" FontSize="18" FontWeight="SemiBold"/>
-                        <TextBlock Style="{StaticResource ReadmeText}" Text="1. Войдите в нужный аккаунт Firefox и подготовьте доступ к Firefox VPN в этом профиле.&#xA;2. Выберите профиль во вкладке «Подключение» и нажмите «Загрузить профиль». Проверьте доступную квоту.&#xA;3. Выберите сервер и свободный локальный порт. Нажмите «Включить прокси».&#xA;4. Дождитесь проверки IP, оценки Net.Coffee и подготовки часового пояса. Изучите предупреждения во вкладке «Статистика».&#xA;5. Нажмите «Открыть защищённый терминал». Запускайте нужные CLI в открывшемся PowerShell.&#xA;6. По завершении остановите задачи, использующие прокси, и отключите подключение.&#xA;&#xA;Перед сменой сервера или профиля отключите прокси. Приложение запоминает порт, профиль и выбранный сервер. Подключение включается вручную. Если сохранённый сервер недоступен, выберите другой в списке. Сервер выбирается вручную. При восстановлении связи приложение использует выбранный сервер."/>
-                    </StackPanel></Border>
-                    <Border Style="{StaticResource Card}"><StackPanel Spacing="12">
-                        <TextBlock Text="Защищённый терминал и часовой пояс" FontSize="18" FontWeight="SemiBold"/>
-                        <TextBlock Style="{StaticResource ReadmeText}" Text="Кнопка открывает PowerShell с переменными прокси и TZ. Их наследуют дочерние процессы. Уже запущенные приложения сохраняют своё окружение. Поддержка прокси и TZ зависит от конкретной программы.&#xA;&#xA;Название «защищённый терминал» обозначает подготовленное окружение. Терминал не создаёт песочницу и не обеспечивает блокировку прямого доступа к сети. Программа, которая игнорирует переменные прокси, может подключаться напрямую.&#xA;&#xA;Часовой пояс берётся из ответа Net.Coffee. При отсутствии пояса используется приблизительное соответствие стране. Источник и предупреждение выводятся под кнопкой терминала. TZ не меняет часы Windows и не гарантирует совпадение всех признаков окружения с географией IP.&#xA;&#xA;Для Codex при поддержке установленной версией CLI применяется отдельный запуск с параметром отключения daemon. Если такой режим недоступен, терминал показывает предупреждение. Учитывайте его перед работой."/>
-                    </StackPanel></Border>
-                    <Border Style="{StaticResource Card}"><StackPanel Spacing="12">
-                        <TextBlock Text="Статистика и оценка доверия" FontSize="18" FontWeight="SemiBold"/>
-                        <TextBlock Style="{StaticResource ReadmeText}" Text="Проверка обращается через прокси к claude.ai и Net.Coffee. Net.Coffee получает проверяемый публичный IP. Вкладка «Статистика» показывает сетевые сведения, риски, географию, время проверки и ошибки источников.&#xA;&#xA;Зелёный цвет обозначает благоприятный результат, оранжевый обозначает предупреждение, красный обозначает риск. Справочные и неизвестные сведения отображаются нейтральным цветом. Для рисков применяются правила Net.Coffee. Приблизительный часовой пояс и ошибки источников дополнительно отмечаются предупреждениями FoxBridge.&#xA;&#xA;Оценка принадлежит Net.Coffee. Она не подтверждает доверие Anthropic и не гарантирует доступ к сервисам. После смены подключения нужна новая проверка. При ошибках или неполных данных изучите сообщения перед запуском терминала."/>
-                    </StackPanel></Border>
-                    <Border Style="{StaticResource Card}"><StackPanel Spacing="12">
-                        <TextBlock Text="Трафик и квота" FontSize="18" FontWeight="SemiBold"/>
-                        <TextBlock Style="{StaticResource ReadmeText}" Text="Остаток квоты поступает от Mozilla и относится к аккаунту. На него может влиять использование Firefox VPN в Firefox и на других устройствах этого аккаунта. Этот показатель не измеряет расход текущего запуска FoxBridge.&#xA;&#xA;В блоке «Активность» отображаются объёмы данных, переданных через локальный прокси в текущем подключении. Проверки IP тоже создают трафик. При отключении счётчики подключения сбрасываются. Данные квоты и локальные счётчики имеют разную область учёта и обновляются в разное время.&#xA;&#xA;Повторное включение прокси позволяет работающим программам снова обращаться к нему. Завершайте ненужные задачи в терминале, если хотите остановить их сетевую активность."/>
-                    </StackPanel></Border>
-                    <Border Style="{StaticResource Card}"><StackPanel Spacing="12">
-                        <TextBlock Text="Требования к запуску" FontSize="18" FontWeight="SemiBold"/>
-                        <TextBlock Style="{StaticResource ReadmeText}" Text="Windows x64 с поддержкой WinUI 3. Текущая сборка проверена на Windows 11.&#xA;.NET Runtime 10 x64.&#xA;Windows App Runtime 2.6.4 x64.&#xA;Python 3.12 или новее, доступный через PATH.&#xA;Профиль Firefox с действующей авторизацией и доступным Firefox VPN.&#xA;Доступ к сети, свободный локальный порт и право записи настроек в папку приложения.&#xA;&#xA;При запуске проверяются версия Python и наличие файлов ядра. Результат и ссылка на установку Python находятся в настройках. Если .NET или Windows App Runtime отсутствует, штатное окно установки появляется до запуска интерфейса.&#xA;&#xA;Сохраняйте все файлы рабочей сборки рядом с EXE, включая папку Backend. Текущая поставка использует установленные компоненты .NET, Windows App Runtime и Python. CLI устанавливаются отдельно.&#xA;&#xA;Для разработки дополнительно нужны .NET SDK 10, Windows SDK и средства сборки WinUI 3. Для обычного запуска эти средства разработки не требуются."/>
-                    </StackPanel></Border>
-                    <Border Style="{StaticResource Card}"><StackPanel Spacing="12">
-                        <TextBlock Text="Данные и предостережения" FontSize="18" FontWeight="SemiBold"/>
-                        <TextBlock Style="{StaticResource ReadmeText}" Text="Берегите профиль Firefox и данные авторизации. Не передавайте их вместе со сборкой. Локальные приложения с доступом к порту могут использовать включённый прокси и расходовать квоту.&#xA;&#xA;Журнал содержит события текущего запуска. Токены и содержимое пользовательских запросов в него не выводятся. Настройки пути к профилям сохраняются рядом с EXE в файле настроек интерфейса. Перед передачей папки приложения проверьте этот файл на личные пути.&#xA;&#xA;При закрытии FoxBridge локальный прокси останавливается. Открытый PowerShell может остаться запущенным со старым адресом прокси в окружении. Для нового подключения открывайте терминал из приложения заново.&#xA;&#xA;Соблюдайте условия Mozilla и сервисов, к которым обращаетесь. Учитывайте ограничения аккаунта, сети и региона. Приложение не гарантирует анонимность или отсутствие ограничений со стороны сервисов."/>
-                    </StackPanel></Border>
+                    <StackPanel x:Name="ReadmeSections" Spacing="18"/>
                 </StackPanel>
                 <StackPanel x:Name="SettingsPanel" Spacing="18" Visibility="Collapsed">
                     <TextBlock Text="Настройки" Style="{ThemeResource TitleTextBlockStyle}"/>
@@ -244,7 +229,6 @@
                         <TextBlock x:Name="DependencyText" Text="Проверяем компоненты…" Style="{StaticResource Muted}" IsTextSelectionEnabled="True"/>
                         <StackPanel Orientation="Horizontal" Spacing="12">
                             <Button x:Name="DependencyCheckButton" Content="Повторить проверку" Click="CheckDependencies"/>
-                            <HyperlinkButton Content="Скачать Python" NavigateUri="https://www.python.org/downloads/windows/"/>
                         </StackPanel>
                         <TextBlock Text="Если отсутствует .NET или Windows App Runtime, инструкция по установке появляется до открытия окна приложения." Style="{StaticResource Muted}" FontSize="11"/>
                     </StackPanel></Border>

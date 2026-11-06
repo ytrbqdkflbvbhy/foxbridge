@@ -25,6 +25,11 @@ jobs:
         run: dotnet run --project development/FoxBridge.WinUI.Checks/FoxBridge.WinUI.Checks.csproj
       - name: Check stdio backend
         run: python development/FoxBridge.WinUI/Backend/test_worker.py -v
+      - name: Install and check TUN engine
+        shell: pwsh
+        run: |
+          ./development/Install-TunEngine.ps1
+          python development/FoxBridge.WinUI/Backend/test_tun.py -v
       - name: Check proxy engine and terminal setup
         working-directory: development/FoxBridge-source
         run: python -m unittest test_bridge test_netcoffee test_reliability test_launcher -v

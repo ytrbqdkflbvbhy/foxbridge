@@ -27,7 +27,7 @@ $foxCheck = [IO.Compression.ZipFile]::OpenRead($foxZip)
 try {
     $foxNames = @($foxCheck.Entries.FullName)
     foreach ($foxRequired in @('FoxBridge.WinUI.exe', 'FoxBridge.WinUI.pri', 'MainPage.xbf',
-        'Backend/worker.py', 'Backend/cacert.pem', 'Assets/AppIcon.ico', 'README.txt', 'LICENSE',
+        'Backend/worker.py', 'Backend/cacert.pem', 'Assets/AppIcon.ico', 'README.txt', 'Help/README.md', 'LICENSE',
         'THIRD-PARTY-NOTICES.md', 'licenses/MPL-2.0.txt')) {
         if ($foxNames -notcontains $foxRequired) { throw "Incomplete release archive: $foxRequired" }
     }

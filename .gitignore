@@ -14,6 +14,7 @@ foxbridge-ui-settings.json*
 
 # Build and IDE output
 **/bin/
+/development/FoxBridge.DeviceSpoof/
 **/obj/
 **/.vs/
 **/.idea/
@@ -25,6 +26,7 @@ foxbridge-ui-settings.json*
 *.zip
 
 # Python caches and virtual environments
+development/FoxBridge.WinUI/Tools/
 __pycache__/
 *.py[cod]
 .venv/

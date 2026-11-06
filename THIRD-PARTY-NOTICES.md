@@ -3,6 +3,13 @@
 The MIT license applies to FoxBridge's original code and artwork. Third-party
 components retain their own licenses.
 
+TUN mode runs the unmodified standalone sing-box 1.14.4 Windows amd64 executable
+as a separate process. It is licensed under GPL-3.0-or-later with the upstream
+name/association restriction. Its notices and GPL text accompany the executable
+in `Tools/`. FoxBridge does not link to sing-box. Corresponding source for this
+exact upstream release: https://github.com/SagerNet/sing-box/tree/v1.14.4
+and https://github.com/SagerNet/sing-box/archive/refs/tags/v1.14.4.tar.gz .
+
 The current WinUI Windows distribution includes managed Windows SDK, WinUI,
 Windows App SDK, C#/WinRT and WebView2 components from Microsoft NuGet packages.
 Their upstream license files accompany the distribution in `licenses/`.

@@ -36,6 +36,11 @@ class BridgeError(Exception):
     pass
 
 
+async def open_tls_connection(host, port, context):
+    return await asyncio.open_connection(host, port, ssl=context, server_hostname=host,
+                                         limit=32768, ssl_handshake_timeout=12)
+
+
 class ServiceError(BridgeError):
     """A failure of the Mozilla transport/control plane, never a destination fallback."""
     def __init__(self, message, code='network', retry_after=0):
@@ -428,10 +433,8 @@ class LocalProxy:
             writer = None
             try:
                 token = await self.passes.get(force=bool(attempt))
-                reader, writer = await asyncio.wait_for(asyncio.open_connection(
-                    self.endpoint.host, self.endpoint.port, ssl=self.context,
-                    server_hostname=self.endpoint.host, limit=32768,
-                    ssl_handshake_timeout=12), 15)
+                reader, writer = await asyncio.wait_for(open_tls_connection(
+                    self.endpoint.host, self.endpoint.port, self.context), 15)
                 writer.write((f'CONNECT {authority} HTTP/1.1\r\nHost: {authority}\r\n'
                               f'Proxy-Authorization: Bearer {token}\r\n\r\n').encode('ascii'))
                 await writer.drain()

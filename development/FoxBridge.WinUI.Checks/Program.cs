@@ -111,3 +111,12 @@ try
 }
 finally { Directory.Delete(settingsFolder, recursive: true); }
 Console.WriteLine("Preferences checks passed: legacy migration, port restore, per-profile endpoints, atomic updates, invalid port fallback. Dependency file checks passed.");
+foreach (var (score, expected) in new (double?, uint)[]
+{
+    (null, 0xFF9CA3AF), (double.NaN, 0xFF9CA3AF), (-1, 0xFF9CA3AF), (101, 0xFF9CA3AF),
+    (0, 0xFFEF4444), (24.99, 0xFFEF4444), (25, 0xFFEAB308), (49.99, 0xFFEAB308),
+    (50, 0xFF84CC16), (79.99, 0xFF84CC16), (80, 0xFF16A34A), (94.99, 0xFF16A34A),
+    (95, 0xFF22C55E), (100, 0xFF22C55E)
+})
+    if (StatisticsFormatter.ScoreColor(score) != expected) throw new Exception($"Incorrect score color: {score}");
+Console.WriteLine("Net.Coffee score colors passed: all boundaries, zero and missing/invalid values.");

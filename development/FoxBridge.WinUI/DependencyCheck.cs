@@ -7,7 +7,7 @@ internal sealed record DependencyReport(string? PythonPath, string Summary, stri
 
 internal static class DependencyCheck
 {
-    internal static readonly string[] RequiredFiles = ["worker.py", "bridge.py", "netcoffee.py", "launcher.py", "timezones.py", "cacert.pem"];
+    internal static readonly string[] RequiredFiles = ["worker.py", "bridge.py", "netcoffee.py", "launcher.py", "timezones.py", "cacert.pem", "tun.py", "tun_host.py"];
 
     public static async Task<DependencyReport> Run(string baseDirectory)
     {
