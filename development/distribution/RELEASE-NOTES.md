@@ -1,19 +1,28 @@
-First WinUI 3 release of FoxBridge for Windows x64.
+FoxBridge 0.8.0 для Windows x64.
 
-* Local HTTP CONNECT proxy using Firefox VPN account access.
-* Manual server selection, saved profile and port preferences.
-* IP diagnostics and risk information from Net.Coffee.
-* PowerShell configured with proxy variables and an IP-based timezone.
-* Runtime dependency checks, themes, activity statistics and an in-app Readme.
+## Что изменилось
 
-Download `FoxBridge-v0.7.0-win-x64.zip`, extract every file and launch
-`FoxBridge.WinUI.exe`. The `.sha256` asset contains the archive checksum.
+* Добавлен режим «Весь компьютер · TUN» для TCP интернет соединений и DNS через туннель. Остальной UDP, попавший в TUN, блокируется.
+* Перед включением TUN обязательна проверка выходного IP и оценки Net.Coffee. Без прав администратора подключение недоступно, в интерфейсе выводится закрываемое предупреждение.
+* Добавлен режим «Отдельные приложения» с кнопками запуска PowerShell и Firefox.
+* Firefox использует выбранный VPN-профиль с его логинами, cookies, расширениями и восстановлением сохранённых окон и вкладок. Настройки прокси применяются временно и восстанавливаются после завершения браузера.
+* Стартовая высота окна подстраивается под содержимое. Для широких низких окон добавлена компактная раскладка.
+* Обновлены отображение квоты и цветовая кодировка оценки Net.Coffee. До получения оценки её цвет нейтральный.
+* Обновлены README и встроенный FAQ. Справка приложения формируется из общего README.
 
-Requires .NET Runtime 10 x64, Windows App Runtime 2.6.4 x64 and Python 3.12+
-available in PATH. These runtimes are installed separately. The interface is in Russian.
+## Запуск
 
-The proxy is limited to applications that honor the configured environment.
-It does not provide system-wide routing or a network kill switch.
-Live account access and VPN connectivity depend on your Firefox account and network.
+Скачайте `FoxBridge-v0.8.0-win-x64.zip`, распакуйте все файлы и запустите `FoxBridge.WinUI.exe`. Файл `.sha256` содержит контрольную сумму архива. Личные настройки и профили пользователя в архив не включены.
 
-Original code and artwork are licensed under MIT. Third-party terms are included.
+Для работы нужны .NET Runtime 10 x64, Windows App Runtime 2.6.4 x64, Python 3.12+ в PATH и профиль Firefox с доступным встроенным VPN. Для TUN запустите FoxBridge от имени администратора. Сетевой движок включён в поставку.
+
+Перед запуском Firefox из FoxBridge закройте все окна выбранного профиля. Уже работающие экземпляры с другими профилями не закрываются.
+
+## Ограничения
+
+* TUN не поддерживает обычный UDP. Игры и звонки могут не работать. Локальная сеть, специальные маршруты и привязка к другому интерфейсу могут обходить туннель. Постоянного kill switch нет.
+* В режиме «Отдельные приложения» программы терминала должны поддерживать переданные переменные прокси.
+* PowerShell получает переменную TZ по данным Net.Coffee. Firefox запускается обычным способом без RemoteAgent, автоматической подмены TZ и локали. Расширения для настройки браузера устанавливаются пользователем по желанию.
+* Оценка Net.Coffee не является рейтингом Anthropic и не гарантирует доступ к сайтам или прохождение Cloudflare.
+
+Исходный код и оригинальные изображения распространяются под MIT. Лицензии сторонних компонентов включены в поставку.

@@ -1,6 +1,6 @@
-param([string]$Version = '0.7.0')
+param([string]$Version = '0.8.0')
 $ErrorActionPreference = 'Stop'
-if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Use a semantic version such as 0.7.0' }
+if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Use a semantic version such as 0.8.0' }
 $foxRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $foxApplication = Join-Path $foxRoot 'FoxBridge-WinUI'
 $foxOutput = Join-Path $PSScriptRoot 'release-artifacts'

@@ -1,4 +1,4 @@
-FoxBridge 0.7.0 for Windows x64
+FoxBridge 0.8.0 for Windows x64
 
 Extract the entire archive and run FoxBridge.WinUI.exe.
 Keep Assets, Backend and the other files beside the executable.
@@ -28,7 +28,7 @@ Browser timezone/language extensions are optional and must be installed manually
 in the selected profile. They are not an official requirement for Claude access.
 The terminal still receives the TZ environment variable from Net.Coffee data.
 FoxBridge requests normal closing of its browser windows when the app exits.
-Current instructions, changes since v0.7.0 and FAQ are in Help/README.md and in-app Readme.
+Current instructions and FAQ are in Help/README.md and in-app Readme.
 The interface and its built-in Readme are currently in Russian.
 
 The default CLI mode applies to applications that support the supplied environment
